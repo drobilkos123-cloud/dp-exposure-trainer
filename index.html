@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DP Exposure Trainer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Exposure Trainer">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#12161b; --panel2:#171c22; --text:#f2f4f7;
+    --muted:#8d98a5; --line:#28313a; --good:#4ade80; --bad:#fb7185; --accent:#f5c451;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:28px 18px 60px}
+  header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:22px}
+  h1{font-size:clamp(28px,5vw,52px);line-height:.95;margin:0;letter-spacing:-.04em}
+  .sub{color:var(--muted);margin-top:10px;font-size:14px}
+  .pill{border:1px solid var(--line);border-radius:999px;padding:8px 12px;color:var(--muted);font-size:12px;white-space:nowrap}
+  .controls,.stats,.card,.history{background:var(--panel);border:1px solid var(--line);border-radius:18px}
+  .controls{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;padding:12px;margin-bottom:12px}
+  select,button,input{font:inherit}
+  select{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px}
+  button{border:0;border-radius:12px;padding:12px 16px;background:var(--accent);color:#111;font-weight:800;cursor:pointer}
+  button.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin-bottom:12px;overflow:hidden}
+  .stat{padding:13px;border-right:1px solid var(--line);text-align:center}
+  .stat:last-child{border-right:0}
+  .stat b{display:block;font-size:22px}
+  .stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .card{padding:clamp(20px,5vw,40px);min-height:360px;display:flex;flex-direction:column;justify-content:center}
+  .label{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.12em;font-weight:800;margin-bottom:16px}
+  .q{font-size:clamp(28px,6vw,54px);font-weight:850;line-height:1.08;letter-spacing:-.035em}
+  .q small{display:block;font-size:.38em;color:var(--muted);font-weight:600;letter-spacing:0;margin-top:10px}
+  .camera-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:22px 0}
+  .camera{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .camera h3{font-size:12px;color:var(--muted);margin:0 0 10px;text-transform:uppercase;letter-spacing:.1em}
+  .setting{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #222a31}
+  .setting:last-child{border:0}
+  .answer-row{display:flex;gap:10px;margin-top:24px}
+  input[type="text"],input[type="number"]{flex:1;min-width:0;background:#0e1216;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:15px;font-size:20px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .choices{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:22px}
+  .choice{background:var(--panel2);color:var(--text);border:1px solid var(--line);text-align:left}
+  .choice:hover{border-color:#596674}
+  .feedback{min-height:44px;margin-top:18px;font-size:17px;font-weight:700}
+  .feedback.good{color:var(--good)}
+  .feedback.bad{color:var(--bad)}
+  .explain{font-size:13px;color:var(--muted);font-weight:500;margin-top:5px}
+  .history{margin-top:12px;padding:14px 16px}
+  .history-head{display:flex;justify-content:space-between;align-items:center}
+  .history h2{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  #mistakes{font-size:13px;color:var(--muted);margin-top:10px}
+  .kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 6px;font-size:11px;color:var(--muted)}
+  @media(max-width:650px){
+    .controls{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(3,1fr)}
+    .stat:nth-child(3){border-right:0}
+    .stat:nth-child(n+4){border-top:1px solid var(--line)}
+    .camera-grid,.choices{grid-template-columns:1fr}
+    header{display:block}.pill{display:inline-block;margin-top:12px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>DP Exposure<br>Trainer</h1>
+      <div class="sub" id="subtitle">5 minutes a day. Build exposure math into muscle memory.</div>
+    </div>
+    <div class="pill" id="pill">180° shutter · same light</div>
+  </header>
+
+  <div class="controls">
+    <select id="mode">
+      <option value="mixed">Mixed — both exercise types</option>
+      <option value="distance">1. Stop distance</option>
+      <option value="camera">2. Camera A → Camera B</option>
+    </select>
+    <select id="difficulty">
+      <option value="easy" selected>Values — full stops</option>
+      <option value="medium">Values — + 1/3 stop</option>
+      <option value="hard">Values — all values</option>
+    </select>
+    <select id="cameraLevel">
+      <option value="simple" selected>Camera — Simple</option>
+      <option value="hard">Camera — Hard</option>
+    </select>
+    <select id="language" aria-label="Language">
+      <option value="en" selected>English</option>
+      <option value="uk">Українська</option>
+    </select>
+    <button id="start">Start 5:00</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b id="time">5:00</b><span id="statTimeLabel">Time</span></div>
+    <div class="stat"><b id="score">0</b><span id="statCorrectLabel">Correct</span></div>
+    <div class="stat"><b id="wrong">0</b><span id="statWrongLabel">Wrong</span></div>
+    <div class="stat"><b id="streak">0</b><span id="statStreakLabel">Streak</span></div>
+    <div class="stat"><b id="acc">—</b><span id="statAccuracyLabel">Accuracy</span></div>
+  </div>
+
+  <section class="card" id="card">
+    <div class="label" id="label">Ready</div>
+    <div class="q" id="question">Press Start.<small>Answer faster than you have time to count it out manually.</small></div>
+    <div id="dynamic"></div>
+    <div class="feedback" id="feedback"></div>
+  </section>
+
+  <section class="history">
+    <div class="history-head">
+      <h2 id="mistakesTitle">Mistakes to review</h2>
+      <button class="secondary" id="clear" style="padding:6px 9px;font-size:11px">Clear</button>
+    </div>
+    <div id="mistakes">None yet.</div>
+  </section>
+</div>
+
+<script>
+const A_FULL = [0.7,1,1.4,2,2.8,4,5.6,8,11,16,22];
+const A_THIRD = [0.7,0.8,0.9,1,1.1,1.3,1.4,1.6,1.8,2,2.2,2.5,2.8,3.2,3.5,4,4.5,5,5.6,6.3,7.1,8,9,10,11,13,14,16,18,20,22];
+const ISO_FULL = [100,200,400,800,1600,3200,6400,12800,25600];
+const ISO_THIRD = [100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000,10000,12800,16000,20000,25600];
+const NDS = [0,0.3,0.6,0.9,1.2,1.5,1.8,2.1];
+const FPS_FULL = [25,50,100,200,400,800];
+const FPS_THIRD = [25,32,40,50,64,80,100,125,160,200,250,320,400,500,640,800,1000];
+
+let running=false, remaining=300, timer=null, score=0, wrong=0, streak=0, current=null, oneStopDistanceStreak=0;
+let mistakes = JSON.parse(localStorage.getItem("dpExposureMistakes") || "[]");
+
+const $ = id => document.getElementById(id);
+
+const I18N = {
+  en: {
+    subtitle:"5 minutes a day. Build exposure math into muscle memory.",
+    pill:"180° shutter · same light",
+    modeMixed:"Mixed — both exercise types",
+    modeDistance:"1. Stop distance",
+    modeCamera:"2. Camera A → Camera B",
+    valuesEasy:"Values — full stops",
+    valuesMedium:"Values — + 1/3 stop",
+    valuesHard:"Values — all values",
+    cameraSimple:"Camera — Simple",
+    cameraHard:"Camera — Hard",
+    start:"Start 5:00",
+    restart:"Restart",
+    ready:"READY",
+    readyQuestion:"Press Start.",
+    readySmall:"Answer faster than you have time to count it out manually.",
+    time:"Time", correct:"Correct", wrong:"Wrong", streak:"Streak", accuracy:"Accuracy",
+    mistakes:"Mistakes to review", clear:"Clear", noneYet:"None yet.",
+    type1:"TYPE 1 · STOP DISTANCE",
+    howMany:"How many stops between",
+    enterStops:"Enter a number: 3, 4⅓, 2.67, etc.",
+    type2Simple:"TYPE 2 · CAMERA A → CAMERA B · SIMPLE",
+    type2Hard:"TYPE 2 · CAMERA A → CAMERA B · HARD",
+    cameraQuestion:"Which ISO + ND combination keeps the same exposure?",
+    sameLight:"Same light · shutter angle 180°",
+    camA:"Camera A", camB:"Camera B",
+    isoPlaceholder:"ISO", ndPlaceholder:"ND (.6 / clear)",
+    correctText:"Correct",
+    correctAnswer:"Correct answer:",
+    secondChance:"Second chance — adjust ISO or ND.",
+    brighter:"Your result is brighter",
+    darker:"Your result is darker",
+    tryAgain:"Try again",
+    exampleCorrect:"For example, a correct combination is:",
+    sameExposure:"gives the same exposure.",
+    sessionComplete:"SESSION COMPLETE",
+    correctCount:"correct.",
+    shortSessions:"Short daily sessions work best.",
+    another5:"Another 5 minutes",
+    stops:"stops",
+    forExample:"for example"
+  },
+  uk: {
+    subtitle:"5 хвилин на день. Доведи експозиційні розрахунки до автоматизму.",
+    pill:"180° shutter · те саме світло",
+    modeMixed:"Mixed — обидва типи",
+    modeDistance:"1. Різниця в стопах",
+    modeCamera:"2. Camera A → Camera B",
+    valuesEasy:"Values — повні стопи",
+    valuesMedium:"Values — + 1/3 стопа",
+    valuesHard:"Values — усі значення",
+    cameraSimple:"Camera — Простий",
+    cameraHard:"Camera — Складний",
+    start:"Start 5:00",
+    restart:"Restart",
+    ready:"ГОТОВО",
+    readyQuestion:"Натисни Start.",
+    readySmall:"Відповідай швидше, ніж встигаєш рахувати вручну.",
+    time:"Час", correct:"Правильно", wrong:"Помилки", streak:"Серія", accuracy:"Точність",
+    mistakes:"Помилки для повторення", clear:"Очистити", noneYet:"Поки немає.",
+    type1:"ТИП 1 · РІЗНИЦЯ В СТОПАХ",
+    howMany:"Скільки стопів між",
+    enterStops:"Введи число: 3, 4⅓, 2.67 тощо.",
+    type2Simple:"ТИП 2 · CAMERA A → CAMERA B · ПРОСТИЙ",
+    type2Hard:"ТИП 2 · CAMERA A → CAMERA B · СКЛАДНИЙ",
+    cameraQuestion:"Яка комбінація ISO + ND збереже ту саму експозицію?",
+    sameLight:"Те саме світло · shutter angle 180°",
+    camA:"Camera A", camB:"Camera B",
+    isoPlaceholder:"ISO", ndPlaceholder:"ND (.6 / clear)",
+    correctText:"Правильно",
+    correctAnswer:"Правильна відповідь:",
+    secondChance:"Другий шанс — поправ ISO або ND.",
+    brighter:"Вийшло світліше",
+    darker:"Вийшло темніше",
+    tryAgain:"Ще раз",
+    exampleCorrect:"Наприклад, правильна комбінація:",
+    sameExposure:"дає ту саму експозицію.",
+    sessionComplete:"СЕСІЮ ЗАВЕРШЕНО",
+    correctCount:"правильних.",
+    shortSessions:"Короткі щоденні сесії працюють найкраще.",
+    another5:"Ще 5 хвилин",
+    stops:"стопів",
+    forExample:"наприклад"
+  }
+};
+
+let lang = localStorage.getItem("dpExposureLanguage") || "en";
+function t(key){ return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key; }
+
+function applyLanguage(){
+  document.documentElement.lang = lang === "uk" ? "uk" : "en";
+  $("language").value = lang;
+  $("subtitle").textContent = t("subtitle");
+  $("pill").textContent = t("pill");
+  $("mode").options[0].textContent = t("modeMixed");
+  $("mode").options[1].textContent = t("modeDistance");
+  $("mode").options[2].textContent = t("modeCamera");
+  $("difficulty").options[0].textContent = t("valuesEasy");
+  $("difficulty").options[1].textContent = t("valuesMedium");
+  $("difficulty").options[2].textContent = t("valuesHard");
+  $("cameraLevel").options[0].textContent = t("cameraSimple");
+  $("cameraLevel").options[1].textContent = t("cameraHard");
+  $("start").textContent = running ? t("restart") : t("start");
+  $("statTimeLabel").textContent = t("time");
+  $("statCorrectLabel").textContent = t("correct");
+  $("statWrongLabel").textContent = t("wrong");
+  $("statStreakLabel").textContent = t("streak");
+  $("statAccuracyLabel").textContent = t("accuracy");
+  $("mistakesTitle").textContent = t("mistakes");
+  $("clear").textContent = t("clear");
+  renderMistakes();
+
+  if(!running){
+    $("label").textContent = t("ready");
+    $("question").innerHTML = `${t("readyQuestion")}<small>${t("readySmall")}</small>`;
+  } else if(current){
+    renderCurrentQuestionOnly();
+  }
+}
+
+const rnd = arr => arr[Math.floor(Math.random()*arr.length)];
+const rint = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+
+function fmtStops(v){
+  const sign = v < 0 ? "−" : "";
+  const a = Math.abs(v);
+  const n = Math.round(a*3);
+  const whole = Math.floor(n/3), rem=n%3;
+  let s = "";
+  if(whole) s += whole;
+  if(rem===1) s += (whole ? "⅓" : "⅓");
+  if(rem===2) s += (whole ? "⅔" : "⅔");
+  if(!s) s="0";
+  return sign+s;
+}
+function normalizedAnswer(s){
+  return String(s).trim().toLowerCase()
+    .replace(",",".").replace(/\s+/g,"")
+    .replace("1/3","⅓").replace("2/3","⅔")
+    .replace("stop","").replace("stops","").replace("стопи","").replace("стопів","").replace("стоп","");
+}
+function parseStops(s){
+  s=normalizedAnswer(s).replace("−","-");
+  let sign=1;if(s.startsWith("-")){sign=-1;s=s.slice(1)}
+  if(s==="⅓") return sign/3;
+  if(s==="⅔") return sign*2/3;
+  if(s.includes("⅓")) return sign*(parseFloat(s.replace("⅓",""))+1/3);
+  if(s.includes("⅔")) return sign*(parseFloat(s.replace("⅔",""))+2/3);
+  const v=parseFloat(s); return isNaN(v)?null:sign*v;
+}
+function updateStats(){
+  $("score").textContent=score;$("wrong").textContent=wrong;$("streak").textContent=streak;
+  const total=score+wrong;$("acc").textContent=total?Math.round(score/total*100)+"%":"—";
+}
+function renderMistakes(){
+  if(!mistakes.length){$("mistakes").textContent=t("noneYet");return}
+  $("mistakes").innerHTML=mistakes.slice(-8).reverse().map(x=>"• "+x).join("<br>");
+}
+function saveMistake(text){
+  mistakes.push(text); if(mistakes.length>30) mistakes=mistakes.slice(-30);
+  localStorage.setItem("dpExposureMistakes",JSON.stringify(mistakes)); renderMistakes();
+}
+function apertureThirdIndex(v){return A_THIRD.indexOf(v)}
+function isoThirdIndex(v){return ISO_THIRD.indexOf(v)}
+function ndThirdUnits(v){return Math.round((v/0.3)*3)}
+function fpsThirdIndex(value){return FPS_THIRD.indexOf(value)}
+
+function makeDistanceCandidate(){
+  const diff=$("difficulty").value;
+  let kind;
+  if(diff==="easy") kind=rnd(["aperture","iso","nd","fps"]);
+  else kind=rnd(["aperture","aperture","iso","nd","fps"]);
+
+  let a,b,stops,label;
+
+  if(kind==="aperture"){
+    const arr=diff==="easy"?A_FULL:A_THIRD;
+    let i=rint(0,arr.length-2), j=rint(i+1,arr.length-1);
+    if(j-i>18) j=i+18;
+    a=arr[i]; b=arr[j];
+    stops=diff==="easy"
+      ? (A_FULL.indexOf(b)-A_FULL.indexOf(a))
+      : (apertureThirdIndex(b)-apertureThirdIndex(a))/3;
+    label="T-stop";
+
+  } else if(kind==="iso"){
+    const arr=diff==="easy"?ISO_FULL:ISO_THIRD;
+    let i=rint(0,arr.length-2), j=rint(i+1,arr.length-1);
+    a=arr[i]; b=arr[j];
+    stops=diff==="easy"
+      ? (ISO_FULL.indexOf(b)-ISO_FULL.indexOf(a))
+      : (isoThirdIndex(b)-isoThirdIndex(a))/3;
+    label="ISO";
+
+  } else if(kind==="nd"){
+    let i=rint(0,NDS.length-2), j=rint(i+1,NDS.length-1);
+    a=NDS[i]; b=NDS[j];
+    stops=(b-a)/0.3;
+    label="ND";
+
+  } else {
+    const arr=diff==="easy" ? FPS_FULL : FPS_THIRD;
+    let i=rint(0,arr.length-2), j=rint(i+1,arr.length-1);
+    a=arr[i]; b=arr[j];
+    stops=diff==="easy"
+      ? (j-i)
+      : (fpsThirdIndex(b)-fpsThirdIndex(a))/3;
+    label="FPS";
+  }
+
+  return {type:"distance",kind,a,b,stops,label};
+}
+
+function makeDistance(){
+  let q;
+
+  // A 1-stop answer can appear once or twice consecutively, never three times.
+  for(let attempt=0;attempt<100;attempt++){
+    q=makeDistanceCandidate();
+    const isOneStop=Math.abs(Math.abs(q.stops)-1)<0.01;
+    if(oneStopDistanceStreak>=2 && isOneStop) continue;
+    break;
+  }
+
+  const isOneStop=Math.abs(Math.abs(q.stops)-1)<0.01;
+  oneStopDistanceStreak=isOneStop ? oneStopDistanceStreak+1 : 0;
+  return q;
+}
+
+function totalUnits(ap, iso, fps, nd){
+  return isoThirdIndex(iso) - apertureThirdIndex(ap) - fpsThirdIndex(fps) - ndThirdUnits(nd);
+}
+
+function cameraExposureDeltaStops(iso, nd){
+  // Positive = Camera B is brighter than Camera A.
+  // Negative = Camera B is darker than Camera A.
+  const isoStops = Math.log2(iso / current.A.iso);
+  const apertureStops = (apertureThirdIndex(current.B.ap) - apertureThirdIndex(current.A.ap)) / 3;
+  const fpsStops = (fpsThirdIndex(current.B.fps) - fpsThirdIndex(current.A.fps)) / 3;
+  const ndStops = (nd - current.A.nd) / 0.3;
+  return isoStops - apertureStops - fpsStops - ndStops;
+}
+
+function cameraDeltaText(delta){
+  const abs = Math.abs(delta);
+  const roundedThirds = Math.round(abs * 3) / 3;
+  const amount = fmtStops(roundedThirds);
+  const direction = delta > 0 ? (lang==="uk"?"світліше":"brighter") : (lang==="uk"?"темніше":"darker");
+  return `${amount} ${t("stops")} ${direction}`;
+}
+
+function makeCamera(){
+  const diff=$("difficulty").value;
+  const cameraLevel=$("cameraLevel").value;
+
+  const apertures=diff==="easy"?A_FULL:A_THIRD;
+  const isos=diff==="easy"?ISO_FULL:ISO_THIRD;
+  const fpsValues=diff==="easy"?FPS_FULL:FPS_THIRD;
+
+  for(let attempt=0;attempt<400;attempt++){
+    const cameraAApertures=apertures.filter(v=>v>=1.3);
+
+    const aAp=rnd(cameraAApertures);
+    const aIso=rnd(isos.slice(1,-2));
+    const aFps=rnd(fpsValues);
+    const aNd=rnd(NDS.slice(0,6));
+
+    let bAp=aAp;
+    let bFps=aFps;
+    let changedParameter="";
+
+    if(cameraLevel==="simple"){
+      changedParameter=rnd(["aperture","fps"]);
+
+      if(changedParameter==="aperture"){
+        const candidates=apertures.filter(v=>v!==aAp);
+        bAp=rnd(candidates);
+      }else{
+        const candidates=fpsValues.filter(v=>v!==aFps);
+        bFps=rnd(candidates);
+      }
+
+    }else{
+      // Hard = both aperture and FPS change.
+      const apertureCandidates=apertures.filter(v=>v!==aAp);
+      const fpsCandidates=fpsValues.filter(v=>v!==aFps);
+      bAp=rnd(apertureCandidates);
+      bFps=rnd(fpsCandidates);
+      changedParameter="aperture+fps";
+    }
+
+    const targetTotal=totalUnits(aAp,aIso,aFps,aNd);
+
+    // Find standard ISO + ND pairs that preserve exposure.
+    const valid=[];
+    for(const nd of NDS.slice(0,7)){
+      for(const iso of isos){
+        if(totalUnits(bAp,iso,bFps,nd)===targetTotal){
+          valid.push({iso,nd});
+        }
+      }
+    }
+
+    if(!valid.length) continue;
+
+    const correct=rnd(valid);
+
+    return {
+      type:"camera",
+      cameraLevel,
+      changedParameter,
+      A:{ap:aAp,iso:aIso,fps:aFps,nd:aNd},
+      B:{ap:bAp,fps:bFps},
+      correct,
+      targetTotal,
+      attempts:0
+    };
+  }
+
+  return makeCamera();
+}
+
+function generate(){
+  const mode=$("mode").value;
+  if(mode==="distance") return makeDistance();
+  if(mode==="camera") return makeCamera();
+  return Math.random()<0.55?makeDistance():makeCamera();
+}
+
+function renderCurrentQuestionOnly(){
+  if(!current) return;
+  $("feedback").className="feedback";
+  $("feedback").innerHTML="";
+  const d=$("dynamic"); d.innerHTML="";
+
+  if(current.type==="distance"){
+    $("label").textContent=t("type1");
+    let lhs,rhs;
+    if(current.kind==="aperture"){lhs="T"+current.a;rhs="T"+current.b}
+    if(current.kind==="iso"){lhs="ISO "+current.a;rhs="ISO "+current.b}
+    if(current.kind==="nd"){lhs=current.a===0?"CLEAR":"ND "+current.a.toFixed(1);rhs="ND "+current.b.toFixed(1)}
+    if(current.kind==="fps"){lhs=current.a+" fps";rhs=current.b+" fps"}
+
+    $("question").innerHTML=`${t("howMany")}<br>${lhs} → ${rhs}?<small>${t("enterStops")}</small>`;
+    d.innerHTML=`<div class="answer-row"><input id="answer" type="text" inputmode="decimal" autocomplete="off" placeholder="stops"><button id="submit">OK</button></div>`;
+    $("submit").onclick=checkDistance;
+    $("answer").addEventListener("keydown",e=>{if(e.key==="Enter")checkDistance()});
+    setTimeout(()=>$("answer").focus(),0);
+
+  } else {
+    $("label").textContent=current.cameraLevel==="simple"?t("type2Simple"):t("type2Hard");
+    $("question").innerHTML=`${t("cameraQuestion")}<small>${t("sameLight")}</small>`;
+    const ndTxt=v=>v===0?"Clear":"ND "+v.toFixed(1);
+
+    d.innerHTML=`
+      <div class="camera-grid">
+        <div class="camera"><h3>${t("camA")}</h3>
+          <div class="setting"><span>FPS</span><b>${current.A.fps}</b></div>
+          <div class="setting"><span>T-stop</span><b>T${current.A.ap}</b></div>
+          <div class="setting"><span>ISO</span><b>${current.A.iso}</b></div>
+          <div class="setting"><span>ND</span><b>${ndTxt(current.A.nd)}</b></div>
+        </div>
+        <div class="camera"><h3>${t("camB")}</h3>
+          <div class="setting"><span>FPS</span><b>${current.B.fps}</b></div>
+          <div class="setting"><span>T-stop</span><b>T${current.B.ap}</b></div>
+          <div class="setting"><span>ISO</span><b>?</b></div>
+          <div class="setting"><span>ND</span><b>?</b></div>
+        </div>
+      </div>
+      <div class="answer-row">
+        <input id="isoAnswer" type="number" inputmode="numeric" autocomplete="off" placeholder="${t("isoPlaceholder")}">
+        <input id="ndAnswer" type="text" inputmode="decimal" autocomplete="off" placeholder="${t("ndPlaceholder")}">
+        <button id="cameraSubmit">OK</button>
+      </div>`;
+    $("cameraSubmit").onclick=checkCameraManual;
+    $("isoAnswer").addEventListener("keydown",e=>{if(e.key==="Enter")$("ndAnswer").focus()});
+    $("ndAnswer").addEventListener("keydown",e=>{if(e.key==="Enter")checkCameraManual()});
+    setTimeout(()=>$("isoAnswer").focus(),0);
+  }
+}
+
+function render(){
+  current=generate();
+  renderCurrentQuestionOnly();
+}
+
+function after(correct, explanation, mistakeText){
+  if(correct){score++;streak++;$("feedback").className="feedback good";$("feedback").innerHTML="✓ "+t("correctText")+"<div class='explain'>"+explanation+"</div>"}
+  else{wrong++;streak=0;$("feedback").className="feedback bad";$("feedback").innerHTML="✗ "+explanation;if(mistakeText)saveMistake(mistakeText)}
+  updateStats();
+  setTimeout(()=>{if(running)render()}, correct?650:1500);
+}
+function checkDistance(){
+  if(!running)return;
+  const inp=$("answer"); if(!inp)return;
+  const val=parseStops(inp.value); if(val===null)return;
+  const ok=Math.abs(Math.abs(val)-Math.abs(current.stops))<0.12;
+  const correct=fmtStops(current.stops);
+  const dir = current.kind==="iso" ? "чутливіше" : "darker";
+  after(ok, ok?`${correct} ${t("stops")}`:`${t("correctAnswer")} ${correct} ${t("stops")}`,
+    `${current.label}: ${current.a} → ${current.b} = ${correct} stops`);
+}
+function parseND(s){
+  s=String(s).trim().toLowerCase().replace(",",".").replace(/\s+/g,"");
+  s=s.replace(/^nd/,"");
+  if(["clear","clr","none","0","0.0",".0",""].includes(s)) return 0;
+  if(s.startsWith(".")) s="0"+s;
+  const v=parseFloat(s);
+  return isNaN(v)?null:v;
+}
+
+function checkCameraManual(){
+  if(!running)return;
+  const isoEl=$("isoAnswer"), ndEl=$("ndAnswer");
+  if(!isoEl || !ndEl)return;
+
+  const iso=parseInt(isoEl.value,10);
+  const nd=parseND(ndEl.value);
+  if(!Number.isFinite(iso) || iso<=0 || nd===null)return;
+
+  const delta=cameraExposureDeltaStops(iso, nd);
+  // A small tolerance avoids floating-point noise; answers are intended in 1/3-stop increments.
+  const ok=Math.abs(delta)<0.08;
+
+  const c=current.correct;
+  const ndTxt=v=>v===0?"Clear":"ND "+v.toFixed(1);
+  const example=`ISO ${c.iso} · ${ndTxt(c.nd)}`;
+  const mistake=`Camera A ${current.A.fps}fps T${current.A.ap} ISO${current.A.iso} ${ndTxt(current.A.nd)} → B ${current.B.fps}fps T${current.B.ap}: for example ${example}`;
+
+  if(ok){
+    score++;
+    streak++;
+    $("feedback").className="feedback good";
+    $("feedback").innerHTML=`✓ ${t("correctText")}<div class='explain'>ISO ${iso} · ${ndTxt(nd)} ${t("sameExposure")}</div>`;
+    updateStats();
+    isoEl.disabled=true;
+    ndEl.disabled=true;
+    $("cameraSubmit").disabled=true;
+    setTimeout(()=>{if(running)render()},650);
+    return;
+  }
+
+  current.attempts=(current.attempts||0)+1;
+  const deltaMsg=cameraDeltaText(delta);
+
+  if(current.attempts===1){
+    // First miss: no penalty yet. Only indicate direction, not the number of stops.
+    const directionOnly = delta > 0 ? t("brighter") : t("darker");
+    $("feedback").className="feedback bad";
+    $("feedback").innerHTML=`✗ ${directionOnly}.<div class='explain'>${t("secondChance")}</div>`;
+    $("cameraSubmit").textContent=t("tryAgain");
+    updateStats();
+
+    // Keep entered values visible so the user can adjust them.
+    setTimeout(()=>{
+      if(isoEl && !isoEl.disabled){
+        isoEl.focus();
+        isoEl.select();
+      }
+    },0);
+    return;
+  }
+
+  // Second miss: now it counts as wrong.
+  wrong++;
+  streak=0;
+  $("feedback").className="feedback bad";
+  $("feedback").innerHTML=`✗ ${deltaMsg}.<div class='explain'>${t("exampleCorrect")} ${example}</div>`;
+  saveMistake(mistake);
+  updateStats();
+
+  isoEl.disabled=true;
+  ndEl.disabled=true;
+  $("cameraSubmit").disabled=true;
+
+  setTimeout(()=>{if(running)render()},1800);
+}
+
+function startGame(){
+  clearInterval(timer);
+  running=true;remaining=300;score=0;wrong=0;streak=0;oneStopDistanceStreak=0;
+  $("start").textContent=t("restart");
+  updateStats(); tickText(); render();
+  timer=setInterval(()=>{
+    remaining--;tickText();
+    if(remaining<=0){
+      clearInterval(timer);running=false;
+      $("label").textContent=t("sessionComplete");
+      const total=score+wrong, acc=total?Math.round(score/total*100):0;
+      $("question").innerHTML=`${score} ${t("correctCount")}<small>${t("accuracy")} ${acc}% · ${t("shortSessions")}</small>`;
+      $("dynamic").innerHTML=`<div class="answer-row"><button id="again">${t("another5")}</button></div>`;
+      $("feedback").innerHTML="";
+      $("again").onclick=startGame;
+    }
+  },1000);
+}
+function tickText(){
+  const m=Math.floor(remaining/60),s=remaining%60;
+  $("time").textContent=`${m}:${String(s).padStart(2,"0")}`;
+}
+function updateControlState(){
+  $("cameraLevel").disabled=$("mode").value==="distance";
+}
+$("mode").addEventListener("change",updateControlState);
+updateControlState();
+
+$("language").value=lang;
+$("language").addEventListener("change",()=>{
+  lang=$("language").value;
+  localStorage.setItem("dpExposureLanguage",lang);
+  applyLanguage();
+});
+
+$("start").onclick=startGame;
+$("clear").onclick=()=>{mistakes=[];localStorage.removeItem("dpExposureMistakes");renderMistakes()};
+applyLanguage();
+renderMistakes();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
