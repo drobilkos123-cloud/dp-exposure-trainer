@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>DP Alarm</title>
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#12161b; --panel2:#171c22; --text:#f2f4f7;
+    --muted:#8d98a5; --line:#28313a; --good:#4ade80; --bad:#fb7185; --accent:#f5c451;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
+  .wrap{max-width:720px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) 16px 40px}
+  button,input{font:inherit}
+  button{border:0;border-radius:14px;padding:14px 18px;background:var(--accent);color:#111;font-weight:800;cursor:pointer}
+  button:disabled{opacity:.45}
+  .ring{animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{background:var(--bg)}50%{background:#2a1015}}
+  #gate{min-height:85vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:22px}
+  #gate h1{font-size:clamp(40px,12vw,84px);margin:0;letter-spacing:-.04em;line-height:.95}
+  #gate p{color:var(--muted);margin:0;font-size:16px}
+  #wake{font-size:24px;padding:24px 40px;border-radius:20px}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .dots{display:flex;gap:8px}
+  .dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--line)}
+  .dot.on{background:var(--good);border-color:var(--good)}
+  .clock{color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:clamp(18px,5vw,36px)}
+  .label{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.12em;font-weight:800;margin-bottom:14px}
+  .q{font-size:clamp(26px,7vw,48px);font-weight:850;line-height:1.1;letter-spacing:-.03em}
+  .q small{display:block;font-size:.4em;color:var(--muted);font-weight:600;letter-spacing:0;margin-top:10px}
+  .camera-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0}
+  .camera{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .camera h3{font-size:12px;color:var(--muted);margin:0 0 8px;text-transform:uppercase;letter-spacing:.1em}
+  .setting{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #222a31}
+  .setting:last-child{border:0}
+  .answer-row{display:flex;gap:10px;margin-top:20px}
+  input{flex:1;min-width:0;background:#0e1216;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:15px;font-size:20px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .feedback{min-height:48px;margin-top:16px;font-size:17px;font-weight:700}
+  .feedback.good{color:var(--good)} .feedback.bad{color:var(--bad)}
+  .explain{font-size:13px;color:var(--muted);font-weight:500;margin-top:5px}
+  #done{display:none;min-height:85vh;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:16px}
+  #done h1{font-size:clamp(40px,11vw,80px);margin:0;letter-spacing:-.04em;color:var(--good)}
+  #done p{color:var(--muted);margin:0}
+  #quiz{display:none}
+  @media(max-width:420px){.camera-grid{grid-template-columns:1fr 1fr;gap:8px}.camera{padding:10px}.setting{font-size:14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section id="gate">
+    <h1>⏰ Підйом</h1>
+    <p id="gateText">Будильник замовкне після 5 правильних відповідей.</p>
+    <button id="wake">Почати</button>
+  </section>
+
+  <section id="quiz">
+    <div class="top">
+      <div class="dots" id="dots"></div>
+      <div class="clock" id="clock"></div>
+    </div>
+    <div class="card">
+      <div class="label" id="label"></div>
+      <div class="q" id="question"></div>
+      <div id="dynamic"></div>
+      <div class="feedback" id="feedback"></div>
+    </div>
+  </section>
+
+  <section id="done">
+    <h1>Доброго ранку ☀️</h1>
+    <p id="doneText"></p>
+  </section>
+</div>
+
+<script>
+// Question pool: full stops only (the "+1/3 stop" mode is intentionally excluded).
+const A_FULL=[0.7,1,1.4,2,2.8,4,5.6,8,11,16,22];
+const A_THIRD=[0.7,0.8,0.9,1,1.1,1.3,1.4,1.6,1.8,2,2.2,2.5,2.8,3.2,3.5,4,4.5,5,5.6,6.3,7.1,8,9,10,11,13,14,16,18,20,22];
+const ISO_FULL=[100,200,400,800,1600,3200,6400,12800,25600];
+const ISO_THIRD=[100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000,10000,12800,16000,20000,25600];
+const NDS=[0,0.3,0.6,0.9,1.2,1.5,1.8,2.1];
+const FPS_FULL=[25,50,100,200,400,800];
+const FPS_THIRD=[25,32,40,50,64,80,100,125,160,200,250,320,400,500,640,800,1000];
+
+const params=new URLSearchParams(location.search);
+const NEEDED=Math.max(1,Math.min(20,parseInt(params.get("n")||"5",10)||5));
+const CAMERA_LEVEL=params.get("camera")==="hard"?"hard":(params.get("camera")==="mixed"?"mixed":"simple");
+const MODE=["distance","camera"].includes(params.get("mode"))?params.get("mode"):"mixed";
+
+const $=id=>document.getElementById(id);
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+const rint=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+
+let solved=0, wrongCount=0, current=null, oneStopStreak=0, startedAt=0;
+
+/* ---------- Alarm sound: soft bell melody that slowly gets louder ---------- */
+let ctx=null, master=null, beepTimer=null, wakeLock=null, keepAlive=null;
+// A calm pentatonic phrase (C4 octave) (note frequency in Hz, start beat, length in beats).
+const MELODY=[
+  [261.63,0,1],[329.63,1,1],[392.00,2,1],[440.00,3,2],
+  [392.00,5,1],[329.63,6,1],[293.66,7,2],
+  [329.63,9,1],[392.00,10,1],[523.25,11,3],
+];
+const BEAT=0.32, PHRASE=15*BEAT+0.6;
+function bell(freq,t,len){
+  // Bell / music-box tone: a sine plus a quieter overtone, soft attack and long decay.
+  for(const [mult,vol] of [[1,0.55],[2,0.18],[3,0.06]]){
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type="sine"; o.frequency.value=freq*mult;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(vol,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+len*BEAT+0.9);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t+len*BEAT+1);
+  }
+}
+// Main alarm sound: morning birds track, looped. The bell melody is only a fallback.
+const SOUND_URL="sounds/morning.mp3";
+const soundBytes=fetch(SOUND_URL).then(r=>{if(!r.ok)throw 0;return r.arrayBuffer()}).catch(()=>null);
+let loopSrc=null;
+function decode(bytes){
+  // Safari still needs the callback form of decodeAudioData on older versions.
+  return new Promise((ok,fail)=>ctx.decodeAudioData(bytes.slice(0),ok,fail));
+}
+function playMelody(){
+  const delay=ctx.createDelay(), fb=ctx.createGain();
+  delay.delayTime.value=0.24; fb.gain.value=0.25;
+  master.connect(delay); delay.connect(fb); fb.connect(delay); fb.connect(ctx.destination);
+  const pattern=()=>{
+    const t0=ctx.currentTime+0.05;
+    for(const [f,b,l] of MELODY) bell(f,t0+b*BEAT,l);
+  };
+  pattern(); beepTimer=setInterval(pattern,PHRASE*1000);
+}
+async function startSound(){
+  ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();
+  ctx.resume();
+  master=ctx.createGain();
+  // Gentle start, reaches full volume after about 45 seconds.
+  master.gain.setValueAtTime(0.35,ctx.currentTime);
+  master.gain.linearRampToValueAtTime(1,ctx.currentTime+45);
+  master.connect(ctx.destination);
+  // Bring audio back if iOS suspends the context (e.g. after a phone call).
+  keepAlive=setInterval(()=>{ if(ctx && ctx.state!=="running") ctx.resume(); },1000);
+  document.body.classList.add("ring");
+  requestWakeLock();
+  let buffer=null;
+  try{ const bytes=await soundBytes; if(bytes) buffer=await decode(bytes); }catch(e){}
+  if(solved>=NEEDED) return;
+  if(buffer){
+    loopSrc=ctx.createBufferSource(); loopSrc.buffer=buffer; loopSrc.loop=true;
+    loopSrc.connect(master); loopSrc.start();
+  } else playMelody();
+}
+function stopSound(){
+  clearInterval(beepTimer); clearInterval(keepAlive);
+  if(loopSrc){ try{loopSrc.stop()}catch(e){} loopSrc=null; }
+  if(master){ master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setValueAtTime(0,ctx.currentTime); master.disconnect(); }
+  if(ctx){ setTimeout(()=>ctx.suspend(),300); }
+  document.body.classList.remove("ring");
+  if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; }
+}
+async function requestWakeLock(){
+  try{ if("wakeLock" in navigator) wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible" && solved<NEEDED && keepAlive){ ctx&&ctx.resume(); requestWakeLock(); }
+});
+
+/* ---------- Helpers from the game ---------- */
+function fmtStops(v){
+  const a=Math.abs(v), n=Math.round(a*3), whole=Math.floor(n/3), rem=n%3;
+  let s=""; if(whole) s+=whole; if(rem===1) s+="⅓"; if(rem===2) s+="⅔"; if(!s) s="0";
+  return (v<0?"−":"")+s;
+}
+function parseStops(s){
+  s=String(s).trim().toLowerCase().replace(",",".").replace(/\s+/g,"")
+    .replace("1/3","⅓").replace("2/3","⅔").replace(/стоп(ів|и)?|stops?/g,"").replace("−","-");
+  let sign=1; if(s.startsWith("-")){sign=-1;s=s.slice(1)}
+  if(s==="⅓") return sign/3; if(s==="⅔") return sign*2/3;
+  if(s.includes("⅓")) return sign*(parseFloat(s.replace("⅓",""))+1/3);
+  if(s.includes("⅔")) return sign*(parseFloat(s.replace("⅔",""))+2/3);
+  const v=parseFloat(s); return isNaN(v)?null:sign*v;
+}
+function parseND(s){
+  s=String(s).trim().toLowerCase().replace(",",".").replace(/\s+/g,"").replace(/^nd/,"");
+  if(["clear","clr","none","0","0.0",".0","","клір","чисто"].includes(s)) return 0;
+  if(s.startsWith(".")) s="0"+s;
+  const v=parseFloat(s); return isNaN(v)?null:v;
+}
+const apIdx=v=>A_THIRD.indexOf(v), isoIdx=v=>ISO_THIRD.indexOf(v), fpsIdx=v=>FPS_THIRD.indexOf(v);
+const ndUnits=v=>Math.round((v/0.3)*3);
+const totalUnits=(ap,iso,fps,nd)=>isoIdx(iso)-apIdx(ap)-fpsIdx(fps)-ndUnits(nd);
+const ndTxt=v=>v===0?"Clear":"ND "+v.toFixed(1);
+
+/* ---------- Question generators (full stops only) ---------- */
+function makeDistanceCandidate(){
+  const kind=rnd(["aperture","iso","nd","fps"]);
+  let arr,label;
+  if(kind==="aperture"){arr=A_FULL;label="T-stop"}
+  else if(kind==="iso"){arr=ISO_FULL;label="ISO"}
+  else if(kind==="nd"){arr=NDS;label="ND"}
+  else {arr=FPS_FULL;label="FPS"}
+  const i=rint(0,arr.length-2), j=rint(i+1,arr.length-1);
+  return {type:"distance",kind,a:arr[i],b:arr[j],stops:j-i,label};
+}
+function makeDistance(){
+  let q;
+  for(let k=0;k<100;k++){ q=makeDistanceCandidate(); if(!(oneStopStreak>=2 && q.stops===1)) break; }
+  oneStopStreak=q.stops===1?oneStopStreak+1:0;
+  return q;
+}
+function makeCamera(){
+  const level=CAMERA_LEVEL==="mixed"?rnd(["simple","hard"]):CAMERA_LEVEL;
+  for(let k=0;k<400;k++){
+    const aAp=rnd(A_FULL.filter(v=>v>=1.3)), aIso=rnd(ISO_FULL.slice(1,-2)), aFps=rnd(FPS_FULL), aNd=rnd(NDS.slice(0,6));
+    let bAp=aAp, bFps=aFps;
+    if(level==="simple"){
+      if(Math.random()<.5) bAp=rnd(A_FULL.filter(v=>v!==aAp)); else bFps=rnd(FPS_FULL.filter(v=>v!==aFps));
+    } else { bAp=rnd(A_FULL.filter(v=>v!==aAp)); bFps=rnd(FPS_FULL.filter(v=>v!==aFps)); }
+    const target=totalUnits(aAp,aIso,aFps,aNd), valid=[];
+    for(const nd of NDS.slice(0,7)) for(const iso of ISO_FULL) if(totalUnits(bAp,iso,bFps,nd)===target) valid.push({iso,nd});
+    if(!valid.length) continue;
+    return {type:"camera",level,A:{ap:aAp,iso:aIso,fps:aFps,nd:aNd},B:{ap:bAp,fps:bFps},correct:rnd(valid),attempts:0};
+  }
+  return makeCamera();
+}
+function generate(){
+  if(MODE==="distance") return makeDistance();
+  if(MODE==="camera") return makeCamera();
+  return Math.random()<0.55?makeDistance():makeCamera();
+}
+function deltaStops(iso,nd){
+  return Math.log2(iso/current.A.iso)-(apIdx(current.B.ap)-apIdx(current.A.ap))/3
+    -(fpsIdx(current.B.fps)-fpsIdx(current.A.fps))/3-(nd-current.A.nd)/0.3;
+}
+
+/* ---------- UI ---------- */
+function renderDots(){
+  $("dots").innerHTML=Array.from({length:NEEDED},(_,i)=>`<div class="dot ${i<solved?"on":""}"></div>`).join("");
+}
+function render(){
+  current=generate();
+  $("feedback").className="feedback"; $("feedback").innerHTML="";
+  const d=$("dynamic");
+  if(current.type==="distance"){
+    $("label").textContent="ТИП 1 · РІЗНИЦЯ В СТОПАХ";
+    let l,r;
+    if(current.kind==="aperture"){l="T"+current.a;r="T"+current.b}
+    if(current.kind==="iso"){l="ISO "+current.a;r="ISO "+current.b}
+    if(current.kind==="nd"){l=current.a===0?"CLEAR":"ND "+current.a.toFixed(1);r="ND "+current.b.toFixed(1)}
+    if(current.kind==="fps"){l=current.a+" fps";r=current.b+" fps"}
+    $("question").innerHTML=`Скільки стопів між<br>${l} → ${r}?<small>Введи число: 1, 2, 3…</small>`;
+    d.innerHTML=`<div class="answer-row"><input id="answer" type="text" inputmode="decimal" autocomplete="off" placeholder="стопи"><button id="submit">OK</button></div>`;
+    $("submit").onclick=checkDistance;
+    $("answer").addEventListener("keydown",e=>{if(e.key==="Enter")checkDistance()});
+    setTimeout(()=>$("answer").focus(),0);
+  } else {
+    $("label").textContent="ТИП 2 · CAMERA A → CAMERA B · "+(current.level==="simple"?"ПРОСТИЙ":"СКЛАДНИЙ");
+    $("question").innerHTML=`Яка комбінація ISO + ND збереже ту саму експозицію?<small>Те саме світло · shutter angle 180°</small>`;
+    d.innerHTML=`
+      <div class="camera-grid">
+        <div class="camera"><h3>Camera A</h3>
+          <div class="setting"><span>FPS</span><b>${current.A.fps}</b></div>
+          <div class="setting"><span>T-stop</span><b>T${current.A.ap}</b></div>
+          <div class="setting"><span>ISO</span><b>${current.A.iso}</b></div>
+          <div class="setting"><span>ND</span><b>${ndTxt(current.A.nd)}</b></div>
+        </div>
+        <div class="camera"><h3>Camera B</h3>
+          <div class="setting"><span>FPS</span><b>${current.B.fps}</b></div>
+          <div class="setting"><span>T-stop</span><b>T${current.B.ap}</b></div>
+          <div class="setting"><span>ISO</span><b>?</b></div>
+          <div class="setting"><span>ND</span><b>?</b></div>
+        </div>
+      </div>
+      <div class="answer-row">
+        <input id="isoAnswer" type="text" inputmode="numeric" autocomplete="off" placeholder="ISO">
+        <input id="ndAnswer" type="text" inputmode="decimal" autocomplete="off" placeholder="ND (.6 / 0)">
+        <button id="cameraSubmit">OK</button>
+      </div>`;
+    $("cameraSubmit").onclick=checkCamera;
+    $("isoAnswer").addEventListener("keydown",e=>{if(e.key==="Enter")$("ndAnswer").focus()});
+    $("ndAnswer").addEventListener("keydown",e=>{if(e.key==="Enter")checkCamera()});
+    setTimeout(()=>$("isoAnswer").focus(),0);
+  }
+}
+function lockInputs(){ $("dynamic").querySelectorAll("input,button").forEach(e=>e.disabled=true); }
+function good(text){
+  solved++; renderDots(); lockInputs();
+  $("feedback").className="feedback good";
+  $("feedback").innerHTML=`✓ Правильно · ${solved}/${NEEDED}<div class="explain">${text}</div>`;
+  if(solved>=NEEDED){ setTimeout(finish,500); return; }
+  setTimeout(render,700);
+}
+function bad(text){
+  wrongCount++; lockInputs();
+  $("feedback").className="feedback bad"; $("feedback").innerHTML="✗ "+text;
+  setTimeout(render,2200);
+}
+function checkDistance(){
+  const v=parseStops($("answer").value); if(v===null) return;
+  const c=fmtStops(current.stops);
+  if(Math.abs(Math.abs(v)-current.stops)<0.12) good(`${c} стопів`);
+  else bad(`Правильна відповідь: ${c} стопів`);
+}
+function checkCamera(){
+  const iso=parseInt($("isoAnswer").value,10), nd=parseND($("ndAnswer").value);
+  if(!Number.isFinite(iso)||iso<=0||nd===null) return;
+  const delta=deltaStops(iso,nd);
+  if(Math.abs(delta)<0.08){ good(`ISO ${iso} · ${ndTxt(nd)} дає ту саму експозицію.`); return; }
+  current.attempts++;
+  if(current.attempts===1){
+    $("feedback").className="feedback bad";
+    $("feedback").innerHTML=`✗ ${delta>0?"Вийшло світліше":"Вийшло темніше"}.<div class="explain">Другий шанс — поправ ISO або ND.</div>`;
+    $("cameraSubmit").textContent="Ще раз";
+    setTimeout(()=>{$("isoAnswer").focus();$("isoAnswer").select()},0);
+    return;
+  }
+  const c=current.correct;
+  bad(`${fmtStops(Math.round(Math.abs(delta)*3)/3)} стопів ${delta>0?"світліше":"темніше"}.<div class="explain">Наприклад, правильна комбінація: ISO ${c.iso} · ${ndTxt(c.nd)}</div>`);
+}
+function finish(){
+  stopSound();
+  $("quiz").style.display="none";
+  $("done").style.display="flex";
+  const secs=Math.round((Date.now()-startedAt)/1000);
+  $("doneText").textContent=`${NEEDED} правильних за ${Math.floor(secs/60)}:${String(secs%60).padStart(2,"0")}, помилок: ${wrongCount}.`;
+}
+function tick(){
+  const d=new Date();
+  $("clock").textContent=d.toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"});
+}
+
+$("gateText").textContent=`Будильник замовкне після ${NEEDED} правильних відповідей.`;
+$("wake").onclick=()=>{
+  startSound();
+  startedAt=Date.now();
+  $("gate").style.display="none";
+  $("quiz").style.display="block";
+  renderDots(); tick(); setInterval(tick,10000);
+  render();
+};
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("./sw.js").catch(()=>{}); }
+</script>
+</body>
+</html>
