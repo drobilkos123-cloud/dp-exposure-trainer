@@ -1,4 +1,4 @@
-const CACHE_NAME = "dp-exposure-trainer-v1";
+const CACHE_NAME = "dp-exposure-trainer-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -6,7 +6,9 @@ const ASSETS = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-512-maskable.png",
-  "./icons/apple-touch-icon.png"
+  "./icons/apple-touch-icon.png",
+  "./alarm.html",
+  "./sounds/morning.mp3"
 ];
 
 self.addEventListener("install", event => {
@@ -25,13 +27,14 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   if(event.request.method !== "GET") return;
+  // Network first so updates show up right away; the cache keeps the app and alarm working offline.
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request).then(response => {
+    fetch(event.request).then(response => {
+      if(response.ok){
         const copy = response.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
-        return response;
-      }).catch(() => caches.match("./index.html"));
-    })
+      }
+      return response;
+    }).catch(() => caches.match(event.request, {ignoreSearch:true}).then(cached => cached || caches.match("./index.html")))
   );
 });
