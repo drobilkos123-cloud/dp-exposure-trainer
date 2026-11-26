@@ -141,6 +141,8 @@ function playMelody(){
   pattern(); beepTimer=setInterval(pattern,PHRASE*1000);
 }
 async function startSound(){
+  // Play even when the iPhone is in silent mode (Safari 17+).
+  try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
   ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();
   ctx.resume();
   master=ctx.createGain();
